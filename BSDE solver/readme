@@ -1,0 +1,1 @@
+The three .py file are the code for deep BSDE solver. The jupyter notebook includes three examples of how to use them to solve problem 4.2, 4.3, 4.4 in Weinan's paper.
