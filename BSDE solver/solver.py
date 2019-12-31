@@ -6,7 +6,6 @@ from tensorflow.keras.layers import BatchNormalization
 import time
 
 TF_DTYPE = tf.float32
-
 class FeedForwardModel(object):
 
     def __init__(self, sess, bsde, config):
@@ -21,6 +20,7 @@ class FeedForwardModel(object):
         
         # Store all z_network in a list
         self.z_network=[]
+        
 
     # Function that calculate the output of a z_network at certain time step, given the input
     def calculate_zt(self, _network, _input):
@@ -60,31 +60,29 @@ class FeedForwardModel(object):
                                                      maxval=self.config.y_init_range[1],
                                                      dtype=TF_DTYPE))
 
-        # The first delta at t=0,set as a scale parameter
-        self._z_init = tf.Variable(tf.random_uniform([1],
-                                               minval=-.1, maxval=.1,
-                                               dtype=TF_DTYPE))
+        # The first delta at t=0
+        self._z_init = tf.Variable(tf.random_uniform([1, self.dim],
+                                                    minval=-.1, maxval=.1,
+                                                    dtype=TF_DTYPE))
         
         # Connect the network 
         with tf.variable_scope('forward'):
             all_one_vec = tf.ones(shape=tf.stack([tf.shape(self._dw)[0], 1]), dtype=TF_DTYPE)
             y = all_one_vec * self._y_init
-            z = all_one_vec * self._z_init
+            z = tf.matmul(all_one_vec, self._z_init)
             
             # Going forward through BSDE:
             for t in range(0, self.num_time_interval - 1):
                 y = y - self.delta_t * (
                     self.bsde.f_tf(time_stamp[t], self._x[:, :, t], y, z))
                 
-                y = y + tf.reduce_sum(z * self.bsde._sigma * self._x[:, :, t]
-                * self._dw[:, :, t], 1, keepdims=True)
+                y = y + tf.reduce_sum(z * self._dw[:, :, t], 1, keepdims=True)
 
                 z = self.calculate_zt(self.z_network[t], self._x[:, :, t + 1])
 
             y = y - self.bsde.delta_t * self.bsde.f_tf(
                 time_stamp[-1], self._x[:, :, -2], y, z)
-            y = y + tf.reduce_sum(z * self.bsde._sigma * self._x[:, :, -2]
-                * self._dw[:, :, -1], 1, keepdims=True)
+            y = y + tf.reduce_sum(z * self._dw[:, :, -1], 1, keepdims=True)
             
             # Mean square loss:
             loss = y - self.bsde.g_tf(self.total_time, self._x[:, :, -1])
@@ -138,4 +136,3 @@ class FeedForwardModel(object):
             # Train the model using the training set
             loss=self._sess.run([self._loss ,self._train_ops], 
                                 feed_dict={self._x: x_train,self._dw:dw_train,self._is_training: True})[0]
-    
